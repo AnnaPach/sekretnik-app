@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 export interface Entry {
   id: string;
@@ -11,23 +12,7 @@ export interface Entry {
   learned: string;
   quote: string;
   mood: number;
-  content?: string; // legacy field for old entries
-}
-
-const STORAGE_KEY = "sekretnik_entries";
-
-function load(): Entry[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function save(entries: Entry[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  content?: string;
 }
 
 type NewEntryData = {
@@ -42,45 +27,86 @@ type NewEntryData = {
 export function useEntries() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const supabase = createClient();
 
   useEffect(() => {
-    setEntries(load());
-    setLoaded(true);
+    let cancelled = false;
+    supabase
+      .from("entries")
+      .select("*")
+      .order("date", { ascending: false })
+      .then(({ data }) => {
+        if (!cancelled) {
+          setEntries(
+            (data ?? []).map((row) => ({
+              id: row.id,
+              date: row.date,
+              title: row.title,
+              moments: row.moments as [string, string, string],
+              gratitude: row.gratitude,
+              learned: row.learned,
+              quote: row.quote,
+              mood: row.mood,
+            }))
+          );
+          setLoaded(true);
+        }
+      });
+    return () => { cancelled = true; };
   }, []);
 
-  const addEntry = useCallback((data: NewEntryData) => {
+  const addEntry = useCallback(async (data: NewEntryData): Promise<string> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: row, error } = await supabase
+      .from("entries")
+      .insert({
+        user_id: user!.id,
+        date: new Date().toISOString().slice(0, 10),
+        ...data,
+      })
+      .select()
+      .single();
+    if (error) throw error;
     const entry: Entry = {
-      id: crypto.randomUUID(),
-      date: new Date().toISOString().slice(0, 10),
-      ...data,
+      id: row.id,
+      date: row.date,
+      title: row.title,
+      moments: row.moments as [string, string, string],
+      gratitude: row.gratitude,
+      learned: row.learned,
+      quote: row.quote,
+      mood: row.mood,
     };
-    setEntries((prev) => {
-      const next = [entry, ...prev];
-      save(next);
-      return next;
-    });
+    setEntries((prev) => [entry, ...prev]);
     return entry.id;
   }, []);
 
-  const updateEntry = useCallback((id: string, data: NewEntryData) => {
-    setEntries((prev) => {
-      const next = prev.map((e) => (e.id === id ? { ...e, ...data } : e));
-      save(next);
-      return next;
-    });
+  const updateEntry = useCallback(async (id: string, data: NewEntryData) => {
+    const { data: row, error } = await supabase
+      .from("entries")
+      .update({ ...data, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    setEntries((prev) =>
+      prev.map((e) =>
+        e.id === id
+          ? { ...e, ...data }
+          : e
+      )
+    );
   }, []);
 
-  const deleteEntry = useCallback((id: string) => {
-    setEntries((prev) => {
-      const next = prev.filter((e) => e.id !== id);
-      save(next);
-      return next;
-    });
+  const deleteEntry = useCallback(async (id: string) => {
+    await supabase.from("entries").delete().eq("id", id);
+    setEntries((prev) => prev.filter((e) => e.id !== id));
   }, []);
 
-  const getEntry = useCallback((id: string): Entry | null => {
-    return load().find((e) => e.id === id) ?? null;
-  }, []);
+  const getEntry = useCallback(
+    (id: string): Entry | null => entries.find((e) => e.id === id) ?? null,
+    [entries]
+  );
 
   const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date));
 

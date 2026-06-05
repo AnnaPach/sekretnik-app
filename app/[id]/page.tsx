@@ -70,6 +70,7 @@ export default function EntryViewer() {
     <div className="flex flex-col min-h-dvh max-w-2xl mx-auto w-full px-4">
       <header className="flex items-center justify-between py-5">
         <button
+          type="button"
           onClick={() => router.push("/")}
           className="text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg px-2 py-1 text-xl transition-colors"
           aria-label="Wróć"
@@ -78,6 +79,7 @@ export default function EntryViewer() {
         </button>
         <div className="flex items-center gap-1">
           <button
+            type="button"
             onClick={() => router.push(`/edit/${id}`)}
             aria-label="Edytuj"
             className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -85,6 +87,7 @@ export default function EntryViewer() {
             <IconPencil />
           </button>
           <button
+            type="button"
             onClick={() => setShowConfirm(true)}
             aria-label="Usuń"
             className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"

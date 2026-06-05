@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEntries } from "@/hooks/useEntries";
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
 
 const MONTHS_PL = [
   "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec",
@@ -42,6 +43,13 @@ function formatCardDate(iso: string) {
 export default function EntryList() {
   const router = useRouter();
   const { entries, loaded } = useEntries();
+  const supabase = createClient();
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
   const groups = groupByMonth(entries);
 
   if (!loaded) return null;
@@ -49,8 +57,19 @@ export default function EntryList() {
   return (
     <div className="flex flex-col min-h-dvh max-w-2xl mx-auto w-full px-4">
       <header className="py-10 border-b border-border mb-2">
-        <h1 className="font-serif text-3xl font-bold tracking-tight">Co Dziś Odkryłam</h1>
-        <p className="text-sm text-muted-foreground italic mt-1">Dziennik Uważności i Wdzięczności</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="font-serif text-3xl font-bold tracking-tight">Co Dziś Odkryłam</h1>
+            <p className="text-sm text-muted-foreground italic mt-1">Dziennik Uważności i Wdzięczności</p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
+            aria-label="Wyloguj"
+          >
+            Wyloguj
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 pb-24">

@@ -37,7 +37,7 @@ const TEXTAREA_CLASS =
 
 export function EntryEditorForm({ id }: { id?: string }) {
   const router = useRouter();
-  const { addEntry, updateEntry, getEntry } = useEntries();
+  const { addEntry, updateEntry, getEntry, loaded } = useEntries();
 
   const today = new Date().toISOString().slice(0, 10);
   const [title, setTitle] = useState("");
@@ -64,7 +64,7 @@ export function EntryEditorForm({ id }: { id?: string }) {
   });
 
   useEffect(() => {
-    if (id) {
+    if (id && loaded) {
       const entry = getEntry(id);
       if (!entry) { router.replace("/"); return; }
       setTitle(entry.title);
@@ -74,7 +74,7 @@ export function EntryEditorForm({ id }: { id?: string }) {
       setQuote(entry.quote ?? "");
       setMood(entry.mood);
     }
-  }, [id]);
+  }, [id, loaded]);
 
   const handleMoment = useCallback((index: number, value: string) => {
     setMoments((prev) => {
@@ -94,14 +94,14 @@ export function EntryEditorForm({ id }: { id?: string }) {
     }
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!canSave) return;
     const data = { title: title.trim(), moments, gratitude, learned, quote, mood };
     if (id) {
-      updateEntry(id, data);
+      await updateEntry(id, data);
       router.push(`/${id}`);
     } else {
-      addEntry(data);
+      await addEntry(data);
       router.push("/");
     }
   }
@@ -118,6 +118,7 @@ export function EntryEditorForm({ id }: { id?: string }) {
     <div className="flex flex-col min-h-dvh max-w-2xl mx-auto w-full px-4">
       <header className="flex items-center justify-between py-5 gap-3">
         <button
+          type="button"
           onClick={handleCancel}
           className="text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg px-2 py-1 text-xl transition-colors"
           aria-label="Wróć"
@@ -127,7 +128,7 @@ export function EntryEditorForm({ id }: { id?: string }) {
         <span className="text-sm text-muted-foreground flex-1 text-center">
           {formatDate(today)}
         </span>
-        <Button onClick={handleSave} disabled={!canSave} size="sm">
+        <Button type="button" onClick={handleSave} disabled={!canSave} size="sm">
           Zapisz
         </Button>
       </header>
