@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEntries } from "@/hooks/useEntries";
 import { MoodPicker } from "@/components/MoodPicker";
 import { Button } from "@/components/ui/button";
+import { Mic, Loader2 } from "lucide-react";
+import { useSpeechRecognition, type FieldId } from "@/hooks/useSpeechRecognition";
 
 const DAYS_PL = ["niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota"];
 const MONTHS_PL = [
@@ -33,11 +35,62 @@ function useAutoResizeRef(): RefObject<HTMLTextAreaElement | null> {
 }
 
 const TEXTAREA_CLASS =
-  "w-full bg-transparent border-none outline-none resize-none overflow-hidden text-sm leading-relaxed text-foreground placeholder:text-border";
+  "flex-1 bg-transparent border-none outline-none resize-none overflow-hidden text-sm leading-relaxed text-foreground placeholder:text-border";
+
+function appendText(current: string, appended: string): string {
+  const trimmed = appended.trim();
+  if (!trimmed) return current;
+  return current ? current + " " + trimmed : trimmed;
+}
+
+function MicButton({
+  fieldId,
+  isActive,
+  isSupported,
+  isTranscribing,
+  onToggle,
+}: {
+  fieldId: FieldId;
+  isActive: boolean;
+  isSupported: boolean;
+  isTranscribing: boolean;
+  onToggle: () => void;
+}) {
+  if (!isSupported) return null;
+  const busy = isActive || isTranscribing;
+  return (
+    <div className={`relative shrink-0 ${busy ? "inline-flex" : "hidden group-focus-within:inline-flex"}`}>
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={isTranscribing}
+        aria-label={isActive ? "Zatrzymaj nagrywanie" : isTranscribing ? "Transkrybowanie…" : "Nagraj głosowo"}
+        aria-pressed={isActive}
+        className={`p-2 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 ${
+          busy
+            ? "text-destructive hover:bg-destructive/10"
+            : "text-muted-foreground hover:text-foreground hover:bg-accent"
+        }`}
+      >
+        {isTranscribing
+          ? <Loader2 size={16} aria-hidden="true" className="animate-spin" />
+          : <Mic size={16} aria-hidden="true" />
+        }
+      </button>
+      {isActive && !isTranscribing && (
+        <span
+          aria-hidden="true"
+          className="animate-pulse bg-destructive rounded-sm w-2 h-2 absolute -top-0.5 -right-0.5"
+        />
+      )}
+    </div>
+  );
+}
 
 export function EntryEditorForm({ id }: { id?: string }) {
   const router = useRouter();
   const { addEntry, updateEntry, getEntry, loaded } = useEntries();
+  const { isSupported, activeField, isTranscribing, toggleListening } = useSpeechRecognition();
 
   const today = new Date().toISOString().slice(0, 10);
   const [title, setTitle] = useState("");
@@ -134,14 +187,29 @@ export function EntryEditorForm({ id }: { id?: string }) {
       </header>
 
       <main className="flex flex-col gap-4 pb-10 flex-1">
-        <input
-          className="font-serif text-2xl font-bold bg-transparent border-none outline-none w-full text-foreground placeholder:text-border"
-          placeholder="Tytuł wpisu…"
-          value={title}
-          onChange={(e) => { setTitle(e.target.value); setDirty(true); }}
-          maxLength={120}
-          autoFocus
-        />
+        {/* Tytuł */}
+        <div className="group flex items-center gap-2">
+          <input
+            className="font-serif text-2xl font-bold bg-transparent border-none outline-none flex-1 text-foreground placeholder:text-border"
+            placeholder="Tytuł wpisu…"
+            value={title}
+            onChange={(e) => { setTitle(e.target.value); setDirty(true); }}
+            maxLength={120}
+            autoFocus
+          />
+          <MicButton
+            fieldId="title"
+            isActive={activeField === "title"}
+            isSupported={isSupported}
+            isTranscribing={isTranscribing}
+            onToggle={() =>
+              toggleListening("title", (text) => {
+                setTitle((prev) => appendText(prev, text).slice(0, 120));
+                setDirty(true);
+              })
+            }
+          />
+        </div>
 
         <div className="flex flex-col gap-2">
           <label className="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground">
@@ -156,7 +224,7 @@ export function EntryEditorForm({ id }: { id?: string }) {
             Najmilsze momenty tego dnia
           </span>
           {([0, 1, 2] as const).map((i) => (
-            <div key={i} className="flex items-start gap-3">
+            <div key={i} className="group flex items-start gap-3">
               <span className="text-sm font-semibold text-muted-foreground pt-1 min-w-[14px]">{i + 1}</span>
               <textarea
                 ref={momentRefs[i]}
@@ -167,6 +235,17 @@ export function EntryEditorForm({ id }: { id?: string }) {
                 placeholder="…"
                 rows={1}
               />
+              <MicButton
+                fieldId={`moments-${i}` as FieldId}
+                isActive={activeField === `moments-${i}`}
+                isSupported={isSupported}
+                isTranscribing={isTranscribing}
+                onToggle={() =>
+                  toggleListening(`moments-${i}` as FieldId, (text) =>
+                    handleMoment(i, appendText(moments[i], text))
+                  )
+                }
+              />
             </div>
           ))}
         </div>
@@ -176,14 +255,28 @@ export function EntryEditorForm({ id }: { id?: string }) {
           <span className="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground">
             Dzisiaj jestem wdzięczna/y za
           </span>
-          <textarea
-            ref={gratitudeRef}
-            className={TEXTAREA_CLASS}
-            value={gratitude}
-            onChange={(e) => { setGratitude(e.target.value); setDirty(true); }}
-            placeholder="…"
-            rows={1}
-          />
+          <div className="group flex items-start gap-2">
+            <textarea
+              ref={gratitudeRef}
+              className={TEXTAREA_CLASS}
+              value={gratitude}
+              onChange={(e) => { setGratitude(e.target.value); setDirty(true); }}
+              placeholder="…"
+              rows={1}
+            />
+            <MicButton
+              fieldId="gratitude"
+              isActive={activeField === "gratitude"}
+              isSupported={isSupported}
+              isTranscribing={isTranscribing}
+              onToggle={() =>
+                toggleListening("gratitude", (text) => {
+                  setGratitude((prev) => appendText(prev, text));
+                  setDirty(true);
+                })
+              }
+            />
+          </div>
         </div>
 
         {/* Sekcja 3 — Nauka */}
@@ -191,14 +284,28 @@ export function EntryEditorForm({ id }: { id?: string }) {
           <span className="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground">
             Dziś nauczyłam/em się
           </span>
-          <textarea
-            ref={learnedRef}
-            className={TEXTAREA_CLASS}
-            value={learned}
-            onChange={(e) => { setLearned(e.target.value); setDirty(true); }}
-            placeholder="…"
-            rows={1}
-          />
+          <div className="group flex items-start gap-2">
+            <textarea
+              ref={learnedRef}
+              className={TEXTAREA_CLASS}
+              value={learned}
+              onChange={(e) => { setLearned(e.target.value); setDirty(true); }}
+              placeholder="…"
+              rows={1}
+            />
+            <MicButton
+              fieldId="learned"
+              isActive={activeField === "learned"}
+              isSupported={isSupported}
+              isTranscribing={isTranscribing}
+              onToggle={() =>
+                toggleListening("learned", (text) => {
+                  setLearned((prev) => appendText(prev, text));
+                  setDirty(true);
+                })
+              }
+            />
+          </div>
         </div>
 
         {/* Sekcja 4 — Cytat (opcjonalny) */}
@@ -207,14 +314,28 @@ export function EntryEditorForm({ id }: { id?: string }) {
             Cytat na dziś{" "}
             <span className="normal-case tracking-normal font-normal text-[11px]">(opcjonalnie)</span>
           </span>
-          <textarea
-            ref={quoteRef}
-            className={TEXTAREA_CLASS}
-            value={quote}
-            onChange={(e) => { setQuote(e.target.value); setDirty(true); }}
-            placeholder={'„…"'}
-            rows={1}
-          />
+          <div className="group flex items-start gap-2">
+            <textarea
+              ref={quoteRef}
+              className={TEXTAREA_CLASS}
+              value={quote}
+              onChange={(e) => { setQuote(e.target.value); setDirty(true); }}
+              placeholder={'„…"'}
+              rows={1}
+            />
+            <MicButton
+              fieldId="quote"
+              isActive={activeField === "quote"}
+              isSupported={isSupported}
+              isTranscribing={isTranscribing}
+              onToggle={() =>
+                toggleListening("quote", (text) => {
+                  setQuote((prev) => appendText(prev, text));
+                  setDirty(true);
+                })
+              }
+            />
+          </div>
         </div>
       </main>
     </div>
