@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback, RefObject } from "react";
 import { useRouter } from "next/navigation";
 import { useEntries } from "@/hooks/useEntries";
 import { MoodPicker } from "@/components/MoodPicker";
@@ -18,6 +18,23 @@ function formatDate(iso: string) {
   return `${DAYS_PL[date.getDay()]}, ${day} ${MONTHS_PL[month - 1]} ${year}`;
 }
 
+/** Auto-resizes a textarea to fit its content (no scrollbar). */
+function autoResize(el: HTMLTextAreaElement) {
+  el.style.height = "auto";
+  el.style.height = el.scrollHeight + "px";
+}
+
+function useAutoResizeRef(): RefObject<HTMLTextAreaElement | null> {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    if (ref.current) autoResize(ref.current);
+  });
+  return ref;
+}
+
+const TEXTAREA_CLASS =
+  "w-full bg-transparent border-none outline-none resize-none overflow-hidden text-sm leading-relaxed text-foreground placeholder:text-border";
+
 export function EntryEditorForm({ id }: { id?: string }) {
   const router = useRouter();
   const { addEntry, updateEntry, getEntry } = useEntries();
@@ -30,6 +47,21 @@ export function EntryEditorForm({ id }: { id?: string }) {
   const [quote, setQuote] = useState("");
   const [mood, setMood] = useState(3);
   const [dirty, setDirty] = useState(false);
+
+  // Refs for the 3 moment textareas (for focus navigation and auto-resize)
+  const momentRefs = [
+    useRef<HTMLTextAreaElement | null>(null),
+    useRef<HTMLTextAreaElement | null>(null),
+    useRef<HTMLTextAreaElement | null>(null),
+  ] as const;
+  const gratitudeRef = useAutoResizeRef();
+  const learnedRef = useAutoResizeRef();
+  const quoteRef = useAutoResizeRef();
+
+  // Auto-resize moment textareas whenever their values change
+  useEffect(() => {
+    momentRefs.forEach((r) => { if (r.current) autoResize(r.current); });
+  });
 
   useEffect(() => {
     if (id) {
@@ -44,13 +76,22 @@ export function EntryEditorForm({ id }: { id?: string }) {
     }
   }, [id]);
 
-  function handleMoment(index: number, value: string) {
+  const handleMoment = useCallback((index: number, value: string) => {
     setMoments((prev) => {
       const next = [...prev] as [string, string, string];
       next[index] = value;
       return next;
     });
     setDirty(true);
+  }, []);
+
+  /** On Enter in a moment field, jump to the next field (or gratitude). */
+  function handleMomentKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>, index: number) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const next = index < 2 ? momentRefs[index + 1].current : gratitudeRef.current;
+      next?.focus();
+    }
   }
 
   function handleSave() {
@@ -115,13 +156,15 @@ export function EntryEditorForm({ id }: { id?: string }) {
           </span>
           {([0, 1, 2] as const).map((i) => (
             <div key={i} className="flex items-start gap-3">
-              <span className="text-sm font-semibold text-muted-foreground pt-1.5 min-w-[14px]">{i + 1}</span>
+              <span className="text-sm font-semibold text-muted-foreground pt-1 min-w-[14px]">{i + 1}</span>
               <textarea
-                className="flex-1 bg-transparent border-none outline-none resize-none text-sm leading-relaxed text-foreground placeholder:text-border"
+                ref={momentRefs[i]}
+                className={TEXTAREA_CLASS}
                 value={moments[i]}
                 onChange={(e) => handleMoment(i, e.target.value)}
+                onKeyDown={(e) => handleMomentKeyDown(e, i)}
                 placeholder="…"
-                rows={2}
+                rows={1}
               />
             </div>
           ))}
@@ -133,11 +176,12 @@ export function EntryEditorForm({ id }: { id?: string }) {
             Dzisiaj jestem wdzięczna/y za
           </span>
           <textarea
-            className="w-full bg-transparent border-none outline-none resize-none text-sm leading-relaxed text-foreground placeholder:text-border"
+            ref={gratitudeRef}
+            className={TEXTAREA_CLASS}
             value={gratitude}
             onChange={(e) => { setGratitude(e.target.value); setDirty(true); }}
             placeholder="…"
-            rows={3}
+            rows={1}
           />
         </div>
 
@@ -147,11 +191,12 @@ export function EntryEditorForm({ id }: { id?: string }) {
             Dziś nauczyłam/em się
           </span>
           <textarea
-            className="w-full bg-transparent border-none outline-none resize-none text-sm leading-relaxed text-foreground placeholder:text-border"
+            ref={learnedRef}
+            className={TEXTAREA_CLASS}
             value={learned}
             onChange={(e) => { setLearned(e.target.value); setDirty(true); }}
             placeholder="…"
-            rows={3}
+            rows={1}
           />
         </div>
 
@@ -162,11 +207,12 @@ export function EntryEditorForm({ id }: { id?: string }) {
             <span className="normal-case tracking-normal font-normal text-[11px]">(opcjonalnie)</span>
           </span>
           <textarea
-            className="w-full bg-transparent border-none outline-none resize-none text-sm leading-relaxed text-foreground placeholder:text-border"
+            ref={quoteRef}
+            className={TEXTAREA_CLASS}
             value={quote}
             onChange={(e) => { setQuote(e.target.value); setDirty(true); }}
             placeholder={'„…"'}
-            rows={2}
+            rows={1}
           />
         </div>
       </main>
