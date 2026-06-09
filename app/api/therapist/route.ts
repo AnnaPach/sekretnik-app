@@ -130,10 +130,12 @@ export async function POST(req: NextRequest) {
   const patientContext = buildPatientContext(userSettings);
   const systemContent = `${BASE_SYSTEM_PROMPT}${patientContext}\n\n${journalContext}\n\n=== AKTUALNA SESJA: ${formatDatePL(currentDate)} ===`;
 
-  const anthropicMessages: Anthropic.MessageParam[] = messages.map((m) => ({
-    role: m.role === "user" ? "user" : "assistant",
-    content: m.content,
-  }));
+  const anthropicMessages: Anthropic.MessageParam[] = messages
+    .filter((m) => m.content?.trim())
+    .map((m) => ({
+      role: m.role === "user" ? "user" : "assistant",
+      content: m.content,
+    }));
 
   // Anthropic requires conversation to start with user message
   if (anthropicMessages.length === 0 || anthropicMessages[0].role !== "user") {

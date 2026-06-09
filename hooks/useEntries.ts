@@ -101,7 +101,9 @@ export function useEntries() {
       return existing.id;
     }
     const { data: { user } } = await supabase.auth.getUser();
-    const firstMessage: Message = { role: "user", content: text, created_at: new Date().toISOString() };
+    const initialMessages: Message[] = text.trim()
+      ? [{ role: "user", content: text.trim(), created_at: new Date().toISOString() }]
+      : [];
     const { data: row, error } = await supabase
       .from("entries")
       .insert({
@@ -115,7 +117,7 @@ export function useEntries() {
         quote: "",
         mood: 3,
         reflection: text,
-        messages: [firstMessage],
+        messages: initialMessages,
       })
       .select()
       .single();
