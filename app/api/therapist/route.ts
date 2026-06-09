@@ -3,9 +3,14 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { Message, Entry } from "@/hooks/useEntries";
 import type { UserSettings } from "@/hooks/useSettings";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY ?? "",
-});
+// Lazy init — klucz musi być dostępny w czasie wywołania, nie przy starcie modułu
+function getClient() {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey || apiKey === "WSTAW_TUTAJ_SWOJ_KLUCZ_ANTHROPIC") {
+    throw new Error("ANTHROPIC_API_KEY nie jest ustawiony w zmiennych środowiskowych");
+  }
+  return new Anthropic({ apiKey });
+}
 
 const MONTHS_PL = [
   "stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca",
@@ -103,9 +108,13 @@ function buildPatientContext(settings?: UserSettings): string {
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey || apiKey === "WSTAW_TUTAJ_SWOJ_KLUCZ_ANTHROPIC") {
-    return new Response("Brak klucza ANTHROPIC_API_KEY w .env.local", { status: 500 });
+  let anthropic: Anthropic;
+  try {
+    anthropic = getClient();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Brak klucza API";
+    console.error("[therapist] Błąd inicjalizacji klienta:", msg);
+    return new Response(msg, { status: 500 });
   }
 
   const body = await req.json() as {
