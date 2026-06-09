@@ -9,7 +9,8 @@ export type FieldId =
   | "moments-2"
   | "gratitude"
   | "learned"
-  | "quote";
+  | "quote"
+  | "reflection";
 
 export interface UseSpeechRecognitionReturn {
   isSupported: boolean;

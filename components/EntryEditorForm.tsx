@@ -87,19 +87,37 @@ function MicButton({
   );
 }
 
-export function EntryEditorForm({ id }: { id?: string }) {
+type NewEntryData = {
+  title: string;
+  moments: [string, string, string];
+  gratitude: string;
+  learned: string;
+  quote: string;
+  mood: number;
+};
+
+interface EntryEditorFormProps {
+  id?: string;
+  initialData?: NewEntryData;
+  onSave?: (data: NewEntryData) => Promise<void>;
+  onCancel?: () => void;
+}
+
+export function EntryEditorForm({ id, initialData, onSave, onCancel }: EntryEditorFormProps) {
   const router = useRouter();
-  const { addEntry, updateEntry, getEntry, loaded } = useEntries();
+  const { addEntry, updateEntry, updateReflection, getEntry, loaded } = useEntries();
   const { isSupported, activeField, isTranscribing, toggleListening } = useSpeechRecognition();
 
   const today = new Date().toISOString().slice(0, 10);
-  const [title, setTitle] = useState("");
-  const [moments, setMoments] = useState<[string, string, string]>(["", "", ""]);
-  const [gratitude, setGratitude] = useState("");
-  const [learned, setLearned] = useState("");
-  const [quote, setQuote] = useState("");
-  const [mood, setMood] = useState(3);
+  const [title, setTitle] = useState(initialData?.title ?? "");
+  const [moments, setMoments] = useState<[string, string, string]>(initialData?.moments ?? ["", "", ""]);
+  const [gratitude, setGratitude] = useState(initialData?.gratitude ?? "");
+  const [learned, setLearned] = useState(initialData?.learned ?? "");
+  const [quote, setQuote] = useState(initialData?.quote ?? "");
+  const [mood, setMood] = useState(initialData?.mood ?? 3);
   const [dirty, setDirty] = useState(false);
+  const [isReflection, setIsReflection] = useState(false);
+  const [reflectionText, setReflectionText] = useState("");
 
   // Refs for the 3 moment textareas (for focus navigation and auto-resize)
   const momentRefs = [
@@ -117,9 +135,14 @@ export function EntryEditorForm({ id }: { id?: string }) {
   });
 
   useEffect(() => {
-    if (id && loaded) {
+    if (id && loaded && !initialData) {
       const entry = getEntry(id);
       if (!entry) { router.replace("/"); return; }
+      if (entry.type === "reflection") {
+        setIsReflection(true);
+        setReflectionText(entry.reflection ?? "");
+        return;
+      }
       setTitle(entry.title);
       setMoments(entry.moments ?? ["", "", ""]);
       setGratitude(entry.gratitude ?? "");
@@ -148,9 +171,17 @@ export function EntryEditorForm({ id }: { id?: string }) {
   }
 
   async function handleSave() {
+    if (isReflection) {
+      if (!reflectionText.trim() || !id) return;
+      await updateReflection(id, reflectionText);
+      router.push(`/${id}`);
+      return;
+    }
     if (!canSave) return;
     const data = { title: title.trim(), moments, gratitude, learned, quote, mood };
-    if (id) {
+    if (onSave) {
+      await onSave(data);
+    } else if (id) {
       await updateEntry(id, data);
       router.push(`/${id}`);
     } else {
@@ -161,14 +192,45 @@ export function EntryEditorForm({ id }: { id?: string }) {
 
   function handleCancel() {
     if (dirty && !window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz wyjść?")) return;
-    router.back();
+    if (onCancel) {
+      onCancel();
+    } else {
+      router.back();
+    }
   }
 
   const hasContent = moments.some((m) => m.trim()) || gratitude.trim() || learned.trim();
   const canSave = title.trim().length > 0 && hasContent;
 
+  const isInline = !!(onSave || onCancel);
+
+  if (isReflection) {
+    return (
+      <div className="flex flex-col min-h-dvh max-w-2xl mx-auto w-full px-4">
+        <header className="flex items-center justify-between py-5 gap-3">
+          <button type="button" onClick={handleCancel}
+            className="text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg px-2 py-1 text-xl transition-colors"
+            aria-label="Wróć">←</button>
+          <Button type="button" onClick={handleSave} disabled={!reflectionText.trim()} size="sm">
+            Zapisz
+          </Button>
+        </header>
+        <main className="flex flex-col flex-1 pb-10">
+          <span className="text-4xl mb-5">💬</span>
+          <textarea
+            className="flex-1 w-full bg-transparent border-none outline-none resize-none text-base leading-relaxed text-foreground placeholder:text-muted-foreground/60 min-h-[200px]"
+            value={reflectionText}
+            onChange={(e) => { setReflectionText(e.target.value); setDirty(true); }}
+            placeholder="Napisz swoje przemyślenia…"
+            autoFocus
+          />
+        </main>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col min-h-dvh max-w-2xl mx-auto w-full px-4">
+    <div className={isInline ? "flex flex-col w-full px-4" : "flex flex-col min-h-dvh max-w-2xl mx-auto w-full px-4"}>
       <header className="flex items-center justify-between py-5 gap-3">
         <button
           type="button"

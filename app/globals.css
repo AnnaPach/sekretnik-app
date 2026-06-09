@@ -62,6 +62,39 @@
   body {
     @apply bg-background text-foreground font-sans;
   }
+  p {
+    font-family: var(--font-playfair);
+    font-weight: 400;
+  }
+}
+
+/* Custom scrollbar — ciepły beż, minimalistyczny */
+.scrollbar-beige {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.scrollbar-beige::-webkit-scrollbar {
+  width: 4px;
+}
+.scrollbar-beige::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-beige::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+.scrollbar-beige::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* Ukryte scrollbary dla kalendarza (scrollable touch/drag) */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 /* TipTap editor styles */

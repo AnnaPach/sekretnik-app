@@ -2,10 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { Mic, MicOff } from "lucide-react";
 import { useEntries } from "@/hooks/useEntries";
+import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { MoodDisplay } from "@/components/MoodPicker";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { AIChatBar } from "@/components/AIChatBar";
+import { TherapistChatPanel } from "@/components/TherapistChatPanel";
 import {
   Dialog,
   DialogContent,
@@ -47,23 +51,62 @@ function IconTrash() {
 export default function EntryViewer() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
-  const { entries, deleteEntry, loaded } = useEntries();
+  const { entries, deleteEntry, addReflection, updateReflection, loaded } = useEntries();
   const [showConfirm, setShowConfirm] = useState(false);
+  const [barValue, setBarValue] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const { activeField, isTranscribing, toggleListening } = useSpeechRecognition();
 
-  const entry = entries.find((e) => e.id === id);
+  const currentEntry = entries.find((e) => e.id === id);
 
   useEffect(() => {
-    if (loaded && !entry) router.replace("/");
-  }, [loaded, entry]);
+    if (loaded && !currentEntry) router.replace("/");
+  }, [loaded, currentEntry]);
 
-  if (!loaded || !entry) return null;
+  if (!loaded || !currentEntry) return null;
 
   function handleDelete() {
     deleteEntry(id);
     router.push("/");
   }
 
-  const moments = entry.moments ?? [];
+  function handleMicPress() {
+    toggleListening("reflection", (transcript) => {
+      setBarValue((prev) => prev ? `${prev} ${transcript}` : transcript);
+    });
+  }
+
+  const handleReflectionSaved = async (text: string) => {
+    setIsSending(true);
+    try {
+      if (currentEntry.type === "reflection") {
+        await updateReflection(currentEntry.id, (currentEntry.reflection ?? "") + "\n\n" + text);
+      } else {
+        const reflectionId = await addReflection(text);
+        router.push(`/${reflectionId}`);
+      }
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const isRecording = activeField === "reflection";
+
+  // ── Widok sesji terapeutycznej ──
+  if (currentEntry.type === "reflection") {
+    return (
+      <TherapistChatPanel
+        entry={currentEntry}
+        allEntries={entries}
+        onDelete={handleDelete}
+        onBack={() => router.back()}
+        showBackButton
+      />
+    );
+  }
+
+  // ── Widok standardowego wpisu ──
+  const moments = currentEntry.moments ?? [];
   const filledMoments = moments.filter(Boolean);
 
   return (
@@ -97,12 +140,12 @@ export default function EntryViewer() {
         </div>
       </header>
 
-      <main className="flex-1 pb-12">
-        <p className="text-sm text-muted-foreground mb-3">{formatDate(entry.date)}</p>
+      <main className="flex-1 pb-36">
+        <p className="text-sm text-muted-foreground mb-3">{formatDate(currentEntry.date)}</p>
         <h1 className="font-serif text-[1.75rem] font-bold leading-snug text-foreground mb-4">
-          {entry.title}
+          {currentEntry.title}
         </h1>
-        <MoodDisplay value={entry.mood} />
+        <MoodDisplay value={currentEntry.mood} />
         <Separator className="my-6" />
 
         <div className="flex flex-col gap-7">
@@ -119,40 +162,64 @@ export default function EntryViewer() {
             </div>
           )}
 
-          {entry.gratitude && (
+          {currentEntry.gratitude && (
             <div className="flex flex-col gap-2">
               <h3 className="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground">
                 Jestem wdzięczna/y za
               </h3>
-              <p className="text-base leading-relaxed text-foreground whitespace-pre-wrap">{entry.gratitude}</p>
+              <p className="text-base leading-relaxed text-foreground whitespace-pre-wrap">{currentEntry.gratitude}</p>
             </div>
           )}
 
-          {entry.learned && (
+          {currentEntry.learned && (
             <div className="flex flex-col gap-2">
               <h3 className="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground">
                 Dziś nauczyłam/em się
               </h3>
-              <p className="text-base leading-relaxed text-foreground whitespace-pre-wrap">{entry.learned}</p>
+              <p className="text-base leading-relaxed text-foreground whitespace-pre-wrap">{currentEntry.learned}</p>
             </div>
           )}
 
-          {entry.quote && (
+          {currentEntry.quote && (
             <blockquote className="relative pl-5 border-l-2 border-border">
               <span className="absolute -top-3 -left-1 font-serif text-5xl leading-none text-border select-none">&ldquo;</span>
-              <p className="font-bold italic text-lg leading-relaxed text-primary">{entry.quote}</p>
+              <p className="font-bold italic text-lg leading-relaxed text-primary">{currentEntry.quote}</p>
             </blockquote>
           )}
 
-          {/* Stare wpisy z polem content */}
-          {entry.content && !filledMoments.length && !entry.gratitude && !entry.learned && (
+          {currentEntry.content && !filledMoments.length && !currentEntry.gratitude && !currentEntry.learned && (
             <div
               className="prose prose-stone max-w-none text-foreground leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: entry.content }}
+              dangerouslySetInnerHTML={{ __html: currentEntry.content }}
             />
           )}
         </div>
       </main>
+
+      <div
+        className="fixed bottom-0 left-0 right-0 px-4 pt-2 bg-background/80 backdrop-blur-sm border-t border-border/40"
+        style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+      >
+        <AIChatBar
+          value={barValue}
+          onChange={setBarValue}
+          onSend={handleReflectionSaved}
+          isTranscribing={isTranscribing}
+          isSending={isSending}
+          actionButton={
+            <Button
+              size="icon"
+              className={`w-12 h-12 rounded-full shadow-lg flex-shrink-0 ${
+                isRecording ? "bg-red-500 hover:bg-red-600 text-white shadow-red-500/30" : "shadow-primary/30"
+              }`}
+              onClick={handleMicPress}
+              aria-label={isRecording ? "Zatrzymaj nagrywanie" : "Nagraj głosowo"}
+            >
+              {isRecording ? <MicOff size={20} /> : <Mic size={20} />}
+            </Button>
+          }
+        />
+      </div>
 
       <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
         <DialogContent>

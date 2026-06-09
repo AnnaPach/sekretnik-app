@@ -13,7 +13,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Co Dziś Odkryłam",
+  title: "Sekretnik",
   description: "Dziennik uważności i wdzięczności",
 };
 
@@ -24,7 +24,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pl" className={`${inter.variable} ${playfair.variable}`}>
-      <body className="min-h-dvh flex flex-col antialiased">{children}</body>
+      <body className="min-h-dvh flex flex-col antialiased" suppressHydrationWarning>{children}</body>
     </html>
   );
 }
